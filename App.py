@@ -1,0 +1,67 @@
+import streamlit as st
+import google.generativeai as genai
+import asyncio
+import edge_tts
+import os
+
+# ទាញយក API Key ពីការកំណត់របស់ Streamlit
+gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+
+if gemini_key:
+    genai.configure(api_key=gemini_key)
+else:
+    st.error("សូមកំណត់ GEMINI_API_KEY នៅក្នុង Streamlit Advanced Settings របស់អ្នកជាមុនសិន!")
+
+async def text_to_speech_khmer(text, output_filename):
+    voice = "km-KH-PisethNeural" # សំឡេងខ្មែរ (ពិសិដ្ឋ)
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(output_filename)
+
+st.set_page_config(page_title="Khmer Narrator Tool", page_icon="🎙️")
+st.title("🎙️ Tool បកប្រែ និងបញ្ចូលសំឡេងខ្មែរអូតូ")
+st.write("បញ្ចូលអត្ថបទរឿងជាភាសាបរទេស ដើម្បីបកប្រែ និងបង្កើតជាសំឡេងសម្រាយរឿងជាភាសាខ្មែរ។")
+
+original_script = st.text_area("បញ្ចូល Script ដើម (អង់គ្លេស ចិន ថៃ...):", height=200)
+
+if st.button("🎬 ចាប់ផ្តើមធ្វើការ"):
+    if not gemini_key:
+        st.error("មិនអាចដំណើរការបានទេ ព្រោះមិនទាន់មាន API Key ច្បាស់លាស់។")
+    elif original_script.strip() == "":
+        st.warning("សូមបញ្ចូល Script ជាមុនសិន!")
+    else:
+        with st.spinner("កំពុងបកប្រែជាភាសាខ្មែរ..."):
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                prompt = f"""
+                ចូលបកប្រែ Script ខាងក្រោមនេះទៅជាភាសាខ្មែរ សម្រាប់យកទៅអានបញ្ចូលឡានក្នុងវីដេអូសម្រាយរឿង។
+                សូមប្រើប្រាស់ពាក្យពេចន៍ឱ្យសមរម្យ ងាយស្តាប់ ហូរហែល្អ និងកុំប្រើពាក្យបច្គេកទេសពេក។
+                (បញ្ជាក់៖ ឆ្លើយតបមកវិញតែអត្ថបទដែលបកប្រែរួចប៉ុណ្ណោះ មិនបាច់មានពាក្យផ្តើម ឬពាក្យពន្យល់ឡើយ)។
+                
+                Script:
+                {original_script}
+                """
+                response = model.generate_content(prompt)
+                khmer_text = response.text
+                
+                st.subheader("📝 អត្ថបទបកប្រែជាខ្មែរ៖")
+                st.write(khmer_text)
+                
+                st.info("កំពុងបំប្លែងទៅជាហ្វាយសំឡេងខ្មែរ...")
+                audio_file = "khmer_voice.mp3"
+                
+                # រត់ TTS
+                asyncio.run(text_to_speech_khmer(khmer_text, audio_file))
+                
+                st.success("រួចរាល់ហើយ!")
+                st.subheader("🎧 ហ្វាយសំឡេងសម្រាយរឿង៖")
+                st.audio(audio_file, format="audio/mp3")
+                
+                with open(audio_file, "rb") as file:
+                    st.download_button(
+                        label="📥 ទាញយកហ្វាយសំឡេង (Download MP3)",
+                        data=file,
+                        file_name="khmer_narration.mp3",
+                        mime="audio/mp3"
+                    )
+            except Exception as e:
+                st.error(f"មានបញ្ហាខុសបច្ចេកទេស៖ {e}")
